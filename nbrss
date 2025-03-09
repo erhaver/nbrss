@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Функция для проверки наличия необходимых утилит
+check_dependencies() {
+    for cmd in rofi awk sort sed; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo >&2 "$cmd не установлен. Установите $cmd и попробуйте снова."; exit 1; }
+    done
+}
+
+# Путь к конфигурационному файлу newsboat в текущей директории
+CONFIG_FILE="$HOME/.config/newsboat/urls"
+
+# Функция для получения существующих категорий из конфигурационного файла
+get_categories() {
+    awk -F'"' '{
+        if (($4 !~ /^~/ && $4 !~ /^http/) && $4 != "") print $4;  # Проверка на категорию в четвертом поле
+        if (($3 !~ /^~/ && $3 !~ /^http/) && $3 != "") print $3;  # Проверка на категорию в третьем поле
+        if (($2 !~ /^~/ && $2 !~ /^http/) && $2 != "") print $2;  # Проверка на категорию во втором поле
+    }' "$CONFIG_FILE" | awk 'NF' | sort -u | sed 's/^"//;s/"$//'
+}
+
+# Функция для проверки существования URL в конфигурационном файле
+url_exists() {
+    grep -q "^$1 " "$CONFIG_FILE"
+}
+
+# Функция для добавления новой ленты в конфигурационный файл
+add_feed() {
+    local url="$1"
+    local name="$2"
+    local category="$3"
+    
+    # Форматирование имени и категории
+    name="\"~${name}\""  # Добавлены кавычки вокруг имени
+    category="\"${category}\""
+    
+    # Добавление новой ленты в конфиг
+    echo "$url $name $category" >> "$CONFIG_FILE"
+    echo "Лента добавлена: $url $name $category"
+}
+
+# Проверка зависимостей
+check_dependencies
+
+# Проверка аргументов
+if [ "$#" -lt 1 ]; then
+    echo "Использование: $0 <url> [<name>] [<category>]"
+    exit 1
+fi
+
+URL="$1"
+NAME="$2"
+CATEGORY="$3"
+
+# Проверка существования URL
+if url_exists "$URL"; then
+    echo "Лента с таким URL уже существует."
+    exit 1
+fi
+
+# Если имя не указано, запрашиваем его через rofi
+if [ -z "$NAME" ]; then
+    NAME=$(echo "" | rofi -dmenu -p "Введите имя ленты:")
+fi
+
+# Если категория не указана, запрашиваем её через rofi
+if [ -z "$CATEGORY" ]; then
+    CATEGORIES=$(get_categories)
+    #CATEGORY=$(echo -e "$CATEGORIES\nНовая категория" | rofi -dmenu -p "Выберите категорию:")
+    CATEGORY=$(echo -e "$CATEGORIES" | rofi -dmenu -p "Выберите категорию:")
+    
+    # Если выбрана новая категория, запрашиваем её имя
+#    if [[ "$CATEGORY" == "Новая категория" ]]; then
+#        CATEGORY=$(echo "" | rofi -dmenu -p "Введите новую категорию:")
+#    fi
+fi
+
+# Добавляем ленту в конфиг
+add_feed "$URL" "$NAME" "$CATEGORY"
